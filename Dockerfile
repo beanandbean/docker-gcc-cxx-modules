@@ -18,7 +18,7 @@ RUN git clone --depth=1 --single-branch --branch $GCC_BRANCH git://gcc.gnu.org/g
 RUN cd gcc \
   && mkdir objdir \
   && cd objdir \
-  && ../configure --disable-multilib \
+  && ../configure --enable-languages=c,c++ --disable-multilib \
   && make -j"$(nproc)" \
   && make install-strip \
   && make distclean \
