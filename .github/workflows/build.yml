@@ -1,0 +1,14 @@
+name: Build and test gcc
+
+on: [push]
+
+jobs:
+  build_gcc:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - run: ./build.sh
+      - run: ./env.sh "mkdir -p build && cd build && cmake .. && make"
+        working-directory: ./example
+      - run: ./env.sh build/hello
+        working-directory: ./example
