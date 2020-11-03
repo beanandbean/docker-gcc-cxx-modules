@@ -1,0 +1,96 @@
+include_guard(GLOBAL)
+
+define_property(TARGET PROPERTY export_map_path BRIEF_DOCS "Export Map Path" FULL_DOCS "Path to exported module mapping")
+
+set(SCAN_SH ${CMAKE_CURRENT_LIST_DIR}/scan.sh)
+
+set(MODULE_MAP_PATH .module_map)
+set(EXPORT_MAP_PATH .export_map)
+set(SCAN_MODULE_TARGET __scan_modules)
+set(EXPORT_MODULE_TARGET __export_modules)
+
+function(__gen_scan_modules_target target)
+  set(module_map_path ${CMAKE_CURRENT_BINARY_DIR}/${target}${MODULE_MAP_PATH})
+  set(scan_modules_target ${target}${SCAN_MODULE_TARGET})
+
+  get_target_property(type ${target} TYPE) # interface has no module_map
+  if((NOT ${type} STREQUAL "INTERFACE_LIBRARY") AND (NOT TARGET ${scan_modules_target}))
+    add_custom_command(OUTPUT ${module_map_path} COMMAND install "-D" "/dev/null" "${module_map_path}")
+    add_custom_target(${scan_modules_target} DEPENDS ${module_map_path})
+    add_dependencies(${target} ${scan_modules_target})
+  endif()
+
+  set(module_map_path ${module_map_path} PARENT_SCOPE)
+endfunction()
+
+function(__gen_export_modules_target target module_map)
+  set(export_map_path ${CMAKE_CURRENT_BINARY_DIR}/${target}${EXPORT_MAP_PATH})
+  set(export_modules_target ${target}${EXPORT_MODULE_TARGET})
+  if(NOT TARGET ${export_modules_target})
+    get_target_property(type ${target} TYPE)
+    if(NOT ${type} STREQUAL "INTERFACE_LIBRARY")
+      add_custom_command(OUTPUT ${export_map_path} COMMAND install "-D" "/dev/null" "${export_map_path}" DEPENDS ${target}${SCAN_MODULE_TARGET} ${module_map})
+    else()
+      add_custom_command(OUTPUT ${export_map_path} COMMAND install "-D" "/dev/null" "${export_map_path}")
+    endif()
+    add_custom_target(${export_modules_target} DEPENDS ${export_map_path})
+
+    set_target_properties(${target} PROPERTIES export_map_path ${export_map_path})
+  endif()
+
+  set(export_map_path ${export_map_path} PARENT_SCOPE)
+endfunction()
+
+function(cxx_module_sources target)
+  target_sources(${target} PRIVATE ${ARGN})
+
+  __gen_scan_modules_target(${target})
+  foreach(arg IN LISTS ARGN)
+    set(filename ${CMAKE_CURRENT_SOURCE_DIR}/${arg})
+    add_custom_command(OUTPUT ${module_map_path} COMMAND ${SCAN_SH} ${filename} ${CMAKE_CURRENT_BINARY_DIR} ">>" ${module_map_path} DEPENDS ${filename} APPEND)
+  endforeach()
+endfunction()
+
+function(cxx_module_dependencies target type)
+  function(_add_dependency dep type)
+    target_link_libraries(${target} ${type} ${dep})
+
+    get_target_property(depend_export_map ${dep} export_map_path)
+    set(depend_export_map_target ${dep}${EXPORT_MODULE_TARGET})
+
+    __gen_scan_modules_target(${target})
+    if((${type} STREQUAL PRIVATE) OR (${type} STREQUAL PUBLIC))
+      add_custom_command(OUTPUT ${module_map_path} COMMAND cat ${depend_export_map} ">>" ${module_map_path} DEPENDS ${depend_export_map_target} ${depend_export_map} APPEND)
+    endif()
+    if((${type} STREQUAL INTERFACE) OR (${type} STREQUAL PUBLIC))
+      __gen_export_modules_target(${target} ${module_map_path})
+      add_custom_command(OUTPUT ${export_map_path} COMMAND cat ${depend_export_map} ">>" ${export_map_path} DEPENDS ${depend_export_map_target} ${depend_export_map} APPEND)
+    endif()
+  endfunction()
+
+  if((${type} STREQUAL PRIVATE) OR (${type} STREQUAL INTERFACE) OR (${type} STREQUAL PUBLIC))
+    foreach(arg IN LISTS ARGN)
+      _add_dependency(${arg} ${type})
+    endforeach()
+  else()
+    _add_dependency(${type} PRIVATE)
+    foreach(arg IN LISTS ARGN)
+      _add_dependency(${arg} PRIVATE)
+    endforeach()
+  endif()
+endfunction()
+
+function(cxx_module_compile_options target)
+  __gen_scan_modules_target(${target})
+  set_property(TARGET ${target} PROPERTY CXX_STANDARD 20)
+  target_compile_options(${target} PUBLIC "-fmodules-ts")
+  target_compile_options(${target} PRIVATE "-fmodule-mapper=${module_map_path}")
+endfunction()
+
+function(cxx_module_export target)
+  __gen_scan_modules_target(${target})
+  __gen_export_modules_target(${target} ${module_map_path})
+  foreach(arg IN LISTS ARGN)
+    add_custom_command(OUTPUT ${export_map_path} COMMAND cat ${module_map_path} "|" grep "\"^${arg} \"" ">>" ${export_map_path} APPEND)
+  endforeach()
+endfunction()

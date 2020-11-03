@@ -1,0 +1,5 @@
+add_library(lang)
+cxx_module_sources(lang greet.cpp lang.cpp)
+cxx_module_dependencies(lang text)
+cxx_module_compile_options(lang)
+cxx_module_export(lang lang)
