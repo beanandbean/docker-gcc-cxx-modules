@@ -1,2 +1,7 @@
 export module lang;
-export import :greet;
+
+import <iostream>;
+
+export import lang.greet;
+
+export void comment() { std::cout << "Wonderful.\n"; }
