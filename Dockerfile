@@ -15,12 +15,13 @@ RUN apt-get update \
 
 RUN git clone --depth=1 --single-branch --branch $GCC_BRANCH git://gcc.gnu.org/git/gcc.git gcc
 
+# Supposed to do 'make install-strip' but that target is temporarily broken in the latest gcc commits
 RUN cd gcc \
   && mkdir objdir \
   && cd objdir \
   && ../configure --enable-languages=c,c++ --disable-multilib \
   && make -j"$(nproc)" \
-  && make install-strip \
+  && make install \
   && make distclean \
   && cd ../.. \
   && rm -rf ./gcc
