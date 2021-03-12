@@ -1,1 +1,1 @@
-docker build -t gcc-modules --build-arg GCC_BRANCH=devel/c++-modules .
+docker build -t gcc-master --build-arg GCC_BRANCH=master .

@@ -37,16 +37,28 @@ if (grep(m/^-fmodules-ts$/, @command)) {
   my $source_dummy_map = catfile($headers_directory, "__source_dummy_map__");
   copy($module_map, $source_dummy_map);
 
-  my $header_dummy_map = catfile($headers_directory, "__header_dummy_map__");
+  my $header_map = catfile($headers_directory, "__header_map__");
+  my %headers;
+  if (!-e $header_map) {
+    open HEADER_MAP, ">", $header_map;
+  } else {
+    open HEADER_MAP, "+<", $header_map;
+    for my $line (<HEADER_MAP>) {
+      if ($line =~ m/^((\/[\w+\-. ]+)+)\s+((\/[\w+\-. ]+)+)$/) {
+        $headers{$1} = $3;
+      }
+    }
+  }
+
   my $header_dummy_src = catfile($headers_directory, "__header_dummy__.hpp");
   
-  open SOURCE_DUMMY, ">>$source_dummy_map";
+  open SOURCE_DUMMY, ">>", $source_dummy_map;
   for (my $i = @args - $source_count; $i < @args; $i++) {
-    if (open INPUT, "<$args[$i]") {
+    if (open INPUT, "<", $args[$i]) {
       for my $line (<INPUT>) {
-        while ($line =~ m/(^|;)\s*import\s+(<[\/\w+\-. ]+>|"[\/\w+\-. ]+")\s*(?=;)/g) {
+        while ($line =~ m/(^|;)\s*import\s+(<[\/\w+\-. ]+>)\s*(?=;)/g) {
           my $include_name = $2;
-          open HEADER_DUMMY, ">$header_dummy_src";
+          open HEADER_DUMMY, ">", $header_dummy_src;
           print HEADER_DUMMY "#include $include_name\n";
           close HEADER_DUMMY;
           my @detection = ($executable, @header_args, "-M", "-H", $header_dummy_src, "2>&1", "1>/dev/null");
@@ -56,16 +68,16 @@ if (grep(m/^-fmodules-ts$/, @command)) {
           my @includes = qx(@detection);
           for my $include (@includes) {
             if ($include =~ m/^\.\s+((\/[\w+\-. ]+)+)$/) {
-              my $path = canonpath(catfile($headers_directory, "$1.gcm"));
-              print SOURCE_DUMMY "$1 $path\n";
-              if (!-e $path || (stat($path))[9] < (stat($1))[9]) {
-                open HEADER_DUMMY, ">$header_dummy_map";
-                print HEADER_DUMMY "$1 $path\n";
-                close HEADER_DUMMY;
-                my (undef, $directory) = fileparse($path);
+              if (!exists $headers{$1}) {
+                $headers{$1} = canonpath(catfile($headers_directory, "$1.gcm"));
+                print HEADER_MAP "$1 $headers{$1}\n";
+              }
+              print SOURCE_DUMMY "$1 $headers{$1}\n";
+              if (!-e $headers{$1} || (stat($headers{$1}))[9] < (stat($1))[9]) {
+                my (undef, $directory) = fileparse($headers{$1});
                 make_path($directory);
-                my @generation = ($executable, @header_args, "-x", "c++-header", "-fmodule-mapper=$header_dummy_map", "-fmodule-header", $1);
-                print "cxx-modules compiler: Generating header unit $include_name...\n";
+                my @generation = ($executable, @header_args, "-x", "c++-header", "-fmodule-mapper=$header_map", "-fmodule-header", $1);
+                print "[cxx-modules] Generating header unit $include_name...\n";
                 if ($ENV{'CXX_MODULES_VERBOSE'}) {
                   print "@generation\n";
                 }
@@ -80,6 +92,8 @@ if (grep(m/^-fmodules-ts$/, @command)) {
     }
   }
   close SOURCE_DUMMY;
+
+  close HEADER_MAP;
 
   @compile = ($executable, "-fmodule-mapper=$source_dummy_map", @args);
   if ($ENV{'CXX_MODULES_VERBOSE'}) {

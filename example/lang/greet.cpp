@@ -1,4 +1,4 @@
-export module lang.greet;
+export module lang:greet;
 
 import <iostream>;
 
