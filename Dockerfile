@@ -1,7 +1,7 @@
 # Modified from the repository cmbant/docker-gcc-build
 #   @ https://github.com/cmbant/docker-gcc-build
 
-FROM ubuntu:20.04
+FROM ubuntu:latest
 
 ARG GCC_BRANCH=releases/gcc-10
 
